@@ -158,56 +158,113 @@ describe('ComputeComparisonUseCase', () => {
 });
 
 // ─── CreatePool use case ──────────────────────────────────────────────────────
+// Actual CB values (TARGET=89.3368, ENERGY=41000 MJ/t):
+//   R001 2024: -340,956,000  (deficit)
+//   R002 2024: +263,082,240  (surplus)
+//   R003 2024: -870,525,120  (deficit)
+//   R004 2025:  +27,483,120  (surplus)
+//   R005 2025: -236,071,440  (deficit)
+//
+// No two same-year routes sum to >= 0 in the seed data,
+// so we seed complianceRepo directly — correct unit-test isolation:
+// CreatePool depends on IComplianceRepository, not on routes.
+
 describe('CreatePoolUseCase', () => {
-  async function setupRepos() {
-    const routeRepo = new InMemoryRouteRepository();
-    const complianceRepo = new InMemoryComplianceRepository();
-    const poolRepo = new InMemoryPoolRepository();
-
-    // Pre-compute CB for members
-    const computeUC = new ComputeCBUseCase(routeRepo, complianceRepo);
-    await computeUC.execute({ shipId: 'R002', year: 2024 }); // surplus
-    await computeUC.execute({ shipId: 'R001', year: 2024 }); // deficit
-
-    return { complianceRepo, poolRepo };
+  function makeRepos() {
+    return {
+      complianceRepo: new InMemoryComplianceRepository(),
+      poolRepo: new InMemoryPoolRepository(),
+    };
   }
 
-  it('creates a valid pool with surplus + deficit members', async () => {
-    const { complianceRepo, poolRepo } = await setupRepos();
-    const uc = new CreatePoolUseCase(poolRepo, complianceRepo);
+  async function seedCB(
+    complianceRepo: InMemoryComplianceRepository,
+    entries: Array<{ shipId: string; year: number; cbGco2eq: number }>
+  ) {
+    for (const e of entries) {
+      await complianceRepo.saveCB(e);
+    }
+  }
 
+  it('creates a valid pool where surplus covers deficit', async () => {
+    const { complianceRepo, poolRepo } = makeRepos();
+    // Fabricate: shipA has large surplus, shipB has small deficit — sum > 0
+    await seedCB(complianceRepo, [
+      { shipId: 'SHIP_A', year: 2024, cbGco2eq: +500_000 },
+      { shipId: 'SHIP_B', year: 2024, cbGco2eq: -200_000 },
+    ]);
+    const uc = new CreatePoolUseCase(poolRepo, complianceRepo);
     const pool = await uc.execute({
       year: 2024,
-      members: [{ shipId: 'R002' }, { shipId: 'R001' }],
+      members: [{ shipId: 'SHIP_A' }, { shipId: 'SHIP_B' }],
     });
-
     expect(pool.id).toBeDefined();
     expect(pool.members.length).toBe(2);
+    // Deficit member should be fully covered
+    const deficitMember = pool.members.find((m) => m.shipId === 'SHIP_B')!;
+    expect(deficitMember.cbAfter).toBeGreaterThanOrEqual(0);
+    // Surplus member gives away 200k
+    const surplusMember = pool.members.find((m) => m.shipId === 'SHIP_A')!;
+    expect(surplusMember.cbAfter).toBeCloseTo(300_000, -3);
+  });
+
+  it('creates a valid pool with all-surplus members', async () => {
+    const { complianceRepo, poolRepo } = makeRepos();
+    await seedCB(complianceRepo, [
+      { shipId: 'SHIP_A', year: 2024, cbGco2eq: +263_082_240 },
+      { shipId: 'SHIP_B', year: 2024, cbGco2eq: +27_483_120 },
+    ]);
+    const uc = new CreatePoolUseCase(poolRepo, complianceRepo);
+    const pool = await uc.execute({
+      year: 2024,
+      members: [{ shipId: 'SHIP_A' }, { shipId: 'SHIP_B' }],
+    });
+    expect(pool.id).toBeDefined();
+    // No transfers needed — cbAfter should equal cbBefore for each member
+    pool.members.forEach((m) => expect(m.cbAfter).toBe(m.cbBefore));
   });
 
   it('throws when pool CB sum is negative', async () => {
-    const routeRepo = new InMemoryRouteRepository();
-    const complianceRepo = new InMemoryComplianceRepository();
-    const poolRepo = new InMemoryPoolRepository();
-    const computeUC = new ComputeCBUseCase(routeRepo, complianceRepo);
-
-    // Two deficit ships
-    await computeUC.execute({ shipId: 'R001', year: 2024 }); // deficit
-    await computeUC.execute({ shipId: 'R003', year: 2024 }); // deficit
-
+    const { complianceRepo, poolRepo } = makeRepos();
+    await seedCB(complianceRepo, [
+      { shipId: 'SHIP_A', year: 2024, cbGco2eq: +100_000 },
+      { shipId: 'SHIP_B', year: 2024, cbGco2eq: -500_000 }, // deficit exceeds surplus
+    ]);
     const uc = new CreatePoolUseCase(poolRepo, complianceRepo);
     await expect(
-      uc.execute({ year: 2024, members: [{ shipId: 'R001' }, { shipId: 'R003' }] })
+      uc.execute({ year: 2024, members: [{ shipId: 'SHIP_A' }, { shipId: 'SHIP_B' }] })
+    ).rejects.toThrow(/negative/i);
+  });
+
+  it('throws when pool CB sum is negative (both deficit)', async () => {
+    const { complianceRepo, poolRepo } = makeRepos();
+    await seedCB(complianceRepo, [
+      { shipId: 'SHIP_A', year: 2024, cbGco2eq: -340_956_000 },
+      { shipId: 'SHIP_B', year: 2024, cbGco2eq: -870_525_120 },
+    ]);
+    const uc = new CreatePoolUseCase(poolRepo, complianceRepo);
+    await expect(
+      uc.execute({ year: 2024, members: [{ shipId: 'SHIP_A' }, { shipId: 'SHIP_B' }] })
     ).rejects.toThrow(/negative/i);
   });
 
   it('throws when fewer than 2 members', async () => {
-    const complianceRepo = new InMemoryComplianceRepository();
-    const poolRepo = new InMemoryPoolRepository();
+    const { complianceRepo, poolRepo } = makeRepos();
     const uc = new CreatePoolUseCase(poolRepo, complianceRepo);
-
     await expect(
-      uc.execute({ year: 2024, members: [{ shipId: 'R002' }] })
+      uc.execute({ year: 2024, members: [{ shipId: 'SHIP_A' }] })
     ).rejects.toThrow(/2 members/i);
+  });
+
+  it('throws when CB record missing for a member', async () => {
+    const { complianceRepo, poolRepo } = makeRepos();
+    // Only seed one member, leave the other without a CB record
+    await seedCB(complianceRepo, [
+      { shipId: 'SHIP_A', year: 2024, cbGco2eq: +500_000 },
+    ]);
+    const uc = new CreatePoolUseCase(poolRepo, complianceRepo);
+    await expect(
+      uc.execute({ year: 2024, members: [{ shipId: 'SHIP_A' }, { shipId: 'SHIP_MISSING' }] })
+    ).rejects.toThrow(/No CB record/i);
   });
 });
