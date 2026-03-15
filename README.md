@@ -1,63 +1,135 @@
 # FuelEU Maritime — Compliance Dashboard
 
-A full-stack implementation of the **FuelEU Maritime compliance module** (Regulation EU 2023/1805), covering route management, GHG intensity comparison, surplus banking (Art. 20), and vessel pooling (Art. 21).
+A **full-stack implementation of the FuelEU Maritime compliance module** (Regulation EU 2023/1805), covering:
+
+* Route management
+* GHG intensity comparison
+* Surplus banking (**Article 20**)
+* Vessel pooling (**Article 21**)
+
+This project was developed as part of a **full-stack engineering assignment** and demonstrates:
+
+* **Hexagonal Architecture (Ports & Adapters)**
+* Clean domain modeling
+* Separation of business logic from frameworks
+* AI-assisted development workflows
 
 ---
 
-## Architecture Summary
+# Architecture Overview
 
-Both backend and frontend follow **Hexagonal Architecture** (Ports & Adapters / Clean Architecture):
+Both the **backend** and **frontend** follow **Hexagonal Architecture (Clean Architecture)**.
 
 ```
-core/
-  domain/        ← Pure entities, types, and domain formulas (no framework)
-  application/   ← Use-cases (orchestrate domain + port interfaces)
-  ports/         ← Repository/service interfaces (the boundary)
-
-adapters/
-  inbound/       ← HTTP handlers (Express) — implements inbound ports
-  outbound/      ← Repositories (in-memory / Postgres) — implements outbound ports
-  ui/            ← React components + hooks — implements UI inbound ports
-  infrastructure/← API clients (Axios) — implements outbound ports
-
-infrastructure/
-  server/        ← Express app wiring and server entry point
+                  ┌─────────────────────┐
+                  │      React UI       │
+                  │  (Routes / Compare) │
+                  └──────────┬──────────┘
+                             │
+                             ▼
+                 ┌─────────────────────┐
+                 │   HTTP Controllers  │
+                 │    (Express API)    │
+                 └──────────┬──────────┘
+                            │
+                            ▼
+                   ┌─────────────────┐
+                   │    Use Cases    │
+                   │ Application Lyr │
+                   └────────┬────────┘
+                            │
+                            ▼
+                   ┌─────────────────┐
+                   │     Domain      │
+                   │  Entities +     │
+                   │   Formulas      │
+                   └────────┬────────┘
+                            │
+                            ▼
+              ┌─────────────────────────┐
+              │ Repository Interfaces   │
+              │       (Ports)           │
+              └──────────┬──────────────┘
+                         │
+                         ▼
+           ┌─────────────────────────────┐
+           │ Infrastructure Adapters     │
+           │  InMemory / Postgres Repo   │
+           └─────────────────────────────┘
 ```
 
-**Key principle:** `core/` has zero dependencies on any framework. Use-cases depend only on port interfaces, not concrete adapters. This enables swapping the in-memory repositories for Postgres adapters without touching any business logic.
+### Key Principle
+
+The **core domain layer has zero framework dependencies**.
+
+Use cases depend only on **port interfaces**, enabling infrastructure components (database, APIs, UI) to be swapped without modifying domain logic.
 
 ---
 
-## Project Structure
+# Project Structure
 
 ```
 fueleu/
 ├── backend/
+│
 │   ├── src/
 │   │   ├── core/
-│   │   │   ├── domain/entities.ts          # Route, CB, BankEntry, Pool + formulas
-│   │   │   ├── application/use-cases/      # GetRoutes, SetBaseline, ComputeCB, etc.
-│   │   │   └── ports/repositories.ts       # IRouteRepository, IBankingRepository, etc.
+│   │   │
+│   │   │   ├── domain/
+│   │   │   │   └── entities.ts
+│   │   │
+│   │   │   ├── application/
+│   │   │   │   └── use-cases/
+│   │   │   │       ├── GetRoutes.ts
+│   │   │   │       ├── SetBaseline.ts
+│   │   │   │       ├── ComputeCB.ts
+│   │   │   │       ├── ComputeComparison.ts
+│   │   │   │       ├── BankSurplus.ts
+│   │   │   │       ├── ApplyBanked.ts
+│   │   │   │       └── CreatePool.ts
+│   │   │
+│   │   │   └── ports/
+│   │   │       └── repositories.ts
+│   │
 │   │   ├── adapters/
-│   │   │   ├── inbound/http/routes/        # Express route handlers
-│   │   │   └── outbound/postgres/          # In-memory repository implementations
-│   │   ├── infrastructure/server/index.ts  # Server entry point
-│   │   └── __tests__/                      # Unit + integration tests
+│   │   │   ├── inbound/http/
+│   │   │   │   └── routes/
+│   │   │   └── outbound/postgres/
+│   │
+│   │   ├── infrastructure/
+│   │   │   └── server/index.ts
+│   │
+│   │   └── __tests__/
+│
 │   ├── package.json
 │   └── tsconfig.json
 │
 ├── frontend/
+│
 │   ├── src/
+│   │
 │   │   ├── core/
-│   │   │   ├── domain/types.ts             # Shared TypeScript types
-│   │   │   └── ports/services.ts           # IRouteService, IBankingService, etc.
+│   │   │   ├── domain/types.ts
+│   │   │   └── ports/services.ts
+│   │
 │   │   ├── adapters/
-│   │   │   ├── infrastructure/apiService.ts # Axios implementations of service ports
+│   │   │   ├── infrastructure/apiService.ts
 │   │   │   └── ui/
-│   │   │       ├── components/             # RoutesTab, CompareTab, BankingTab, PoolingTab
-│   │   │       └── hooks/                  # useRoutes, useComparison, useBanking, usePooling
-│   │   ├── App.tsx                         # Tab navigation shell
-│   │   └── main.tsx                        # React entry point
+│   │   │       ├── components/
+│   │   │       │   ├── RoutesTab.tsx
+│   │   │       │   ├── CompareTab.tsx
+│   │   │       │   ├── BankingTab.tsx
+│   │   │       │   └── PoolingTab.tsx
+│   │   │       │
+│   │   │       └── hooks/
+│   │   │           ├── useRoutes.ts
+│   │   │           ├── useComparison.ts
+│   │   │           ├── useBanking.ts
+│   │   │           └── usePooling.ts
+│   │
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│
 │   ├── package.json
 │   └── vite.config.ts
 │
@@ -68,160 +140,227 @@ fueleu/
 
 ---
 
-## Setup & Run
+# Setup & Run
 
-### Prerequisites
-- Node.js ≥ 18
-- npm ≥ 9
+## Prerequisites
 
-### Backend
-
-```bash
-cd backend
-npm install
-npm run dev        # starts on http://localhost:4000
-```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev        # starts on http://localhost:3000
-```
-
-The Vite dev server proxies all API calls (`/routes`, `/compliance`, `/banking`, `/pools`) to `http://localhost:4000`, so no CORS configuration is needed during development.
+* Node.js **≥ 18**
+* npm **≥ 9**
 
 ---
 
-## Running Tests
+# Backend
 
-### Backend
+Start the API server.
 
-```bash
+```
+cd backend
+npm install
+npm run dev
+```
+
+Backend runs at:
+
+```
+http://localhost:4000
+```
+
+---
+
+# Frontend
+
+Start the dashboard.
+
+```
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend runs at:
+
+```
+http://localhost:3000
+```
+
+The Vite dev server proxies API requests to:
+
+```
+http://localhost:4000
+```
+
+So **no CORS configuration is required** during development.
+
+---
+
+# Running Tests
+
+## Backend
+
+```
 cd backend
 npm test
 ```
 
-Runs both unit tests (domain formulas, use-cases) and integration tests (HTTP endpoints via Supertest).
+Includes:
 
-### Frontend
+* Unit tests for domain formulas
+* Use-case tests
+* Integration tests with Supertest
 
-```bash
+---
+
+## Frontend
+
+```
 cd frontend
 npm test
 ```
 
-Runs component tests and domain formula tests via Vitest + Testing Library.
+Runs:
+
+* Component tests
+* Hook tests
+* Domain formula validation
 
 ---
 
-## API Reference
+# API Reference
 
-### Routes
+## Routes
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/routes` | List all routes. Query: `vesselType`, `fuelType`, `year` |
-| `POST` | `/routes/:id/baseline` | Set a route as the baseline |
-| `GET` | `/routes/comparison` | Compare all non-baseline routes against baseline |
-
-### Compliance
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/compliance/cb?shipId=&year=` | Compute & store Compliance Balance |
-| `GET` | `/compliance/adjusted-cb?shipId=&year=` | CB + banked surplus |
-
-### Banking (Art. 20)
-
-| Method | Endpoint | Body | Description |
-|--------|----------|------|-------------|
-| `GET` | `/banking/records?shipId=&year=` | — | List bank entries |
-| `POST` | `/banking/bank` | `{ shipId, year }` | Bank positive CB |
-| `POST` | `/banking/apply` | `{ shipId, year, amount }` | Apply banked to deficit |
-
-### Pooling (Art. 21)
-
-| Method | Endpoint | Body | Description |
-|--------|----------|------|-------------|
-| `POST` | `/pools` | `{ year, members: [{shipId}] }` | Create compliance pool |
-| `GET` | `/pools/:id` | — | Retrieve pool by ID |
+| Method | Endpoint               | Description                      |
+| ------ | ---------------------- | -------------------------------- |
+| GET    | `/routes`              | List all routes                  |
+| POST   | `/routes/:id/baseline` | Set baseline route               |
+| GET    | `/routes/comparison`   | Compare baseline vs other routes |
 
 ---
 
-## Core Formulas
+## Compliance
+
+| Method | Endpoint                                | Description                |
+| ------ | --------------------------------------- | -------------------------- |
+| GET    | `/compliance/cb?shipId=&year=`          | Compute Compliance Balance |
+| GET    | `/compliance/adjusted-cb?shipId=&year=` | CB after banking           |
+
+---
+
+## Banking (Article 20)
+
+| Method | Endpoint                         | Description          |
+| ------ | -------------------------------- | -------------------- |
+| GET    | `/banking/records?shipId=&year=` | List bank entries    |
+| POST   | `/banking/bank`                  | Bank positive CB     |
+| POST   | `/banking/apply`                 | Apply banked surplus |
+
+---
+
+## Pooling (Article 21)
+
+| Method | Endpoint     | Description            |
+| ------ | ------------ | ---------------------- |
+| POST   | `/pools`     | Create compliance pool |
+| GET    | `/pools/:id` | Retrieve pool          |
+
+---
+
+# Core Formulas
 
 ```
-Energy in scope (MJ)  = fuelConsumption (t) × 41,000 MJ/t
-Compliance Balance    = (Target - Actual GHG) × Energy in scope
-  Positive CB → Surplus
-  Negative CB → Deficit
+Energy in scope (MJ)
+= fuelConsumption (t) × 41,000 MJ/t
 
-Target Intensity (2025) = 89.3368 gCO₂e/MJ  (2% below 91.16)
+Compliance Balance
+= (Target − Actual GHG) × Energy
 
-Percent Difference = ((comparison / baseline) - 1) × 100
+Positive CB → Surplus
+Negative CB → Deficit
 ```
 
----
+### Target Intensity
 
-## Sample API Requests
+```
+Target (2025)
+= 89.3368 gCO₂e/MJ
+```
 
-```bash
-# Get all routes
-curl http://localhost:4000/routes
+### Comparison
 
-# Set R002 as baseline
-curl -X POST http://localhost:4000/routes/R002/baseline
-
-# Compare routes
-curl http://localhost:4000/routes/comparison
-
-# Compute CB for R002 in 2024
-curl "http://localhost:4000/compliance/cb?shipId=R002&year=2024"
-
-# Bank surplus for R002
-curl -X POST http://localhost:4000/banking/bank \
-  -H "Content-Type: application/json" \
-  -d '{"shipId":"R002","year":2024}'
-
-# Apply 100,000 gCO2e from bank
-curl -X POST http://localhost:4000/banking/apply \
-  -H "Content-Type: application/json" \
-  -d '{"shipId":"R002","year":2024,"amount":100000}'
-
-# Create a pool (first compute CB for both ships)
-curl -X POST http://localhost:4000/pools \
-  -H "Content-Type: application/json" \
-  -d '{"year":2024,"members":[{"shipId":"R002"},{"shipId":"R001"}]}'
+```
+Percent Difference
+= ((comparison / baseline) − 1) × 100
 ```
 
 ---
 
-## Seed Data
+# Seed Dataset
 
-| Route | Vessel | Fuel | Year | GHG (gCO₂e/MJ) | CB Status |
-|-------|--------|------|------|-----------------|-----------|
-| R001 | Container | HFO | 2024 | 91.0 | ❌ Deficit |
-| R002 | BulkCarrier | LNG | 2024 | 88.0 | ✅ Surplus |
-| R003 | Tanker | MGO | 2024 | 93.5 | ❌ Deficit |
-| R004 | RoRo | HFO | 2025 | 89.2 | ✅ Surplus (marginal) |
-| R005 | Container | LNG | 2025 | 90.5 | ❌ Deficit |
+| Route | Vessel      | Fuel | Year | GHG  | Result  |
+| ----- | ----------- | ---- | ---- | ---- | ------- |
+| R001  | Container   | HFO  | 2024 | 91.0 | Deficit |
+| R002  | BulkCarrier | LNG  | 2024 | 88.0 | Surplus |
+| R003  | Tanker      | MGO  | 2024 | 93.5 | Deficit |
+| R004  | RoRo        | HFO  | 2025 | 89.2 | Surplus |
+| R005  | Container   | LNG  | 2025 | 90.5 | Deficit |
 
-R001 is the default baseline. Use the Routes tab or `POST /routes/:id/baseline` to change it.
+Default baseline = **R001**
 
 ---
 
-## Tech Stack
+# Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Frontend framework | React 18 + TypeScript |
-| Frontend styling | TailwindCSS 3 |
-| Frontend charts | Recharts |
-| Frontend build | Vite 5 |
-| Frontend tests | Vitest + Testing Library |
-| Backend framework | Express 4 + TypeScript |
-| Backend tests | Jest + Supertest |
-| Architecture | Hexagonal (Ports & Adapters) |
-| Storage | In-memory (swap-ready for Postgres) |
+| Layer            | Technology                 |
+| ---------------- | -------------------------- |
+| Frontend         | React + TypeScript         |
+| Styling          | TailwindCSS                |
+| Charts           | Recharts                   |
+| Build Tool       | Vite                       |
+| Backend          | Node.js + Express          |
+| Testing          | Jest + Supertest           |
+| Frontend Testing | Vitest                     |
+| Architecture     | Hexagonal                  |
+| Storage          | In-Memory (Postgres ready) |
+
+---
+
+# AI-Agent Usage
+
+AI tools were used for:
+
+* Boilerplate generation
+* Use-case scaffolding
+* Refactoring suggestions
+* Test case generation
+
+See:
+
+```
+AGENT_WORKFLOW.md
+```
+
+for the full workflow log.
+
+---
+
+# Reflection
+
+Lessons learned about **AI-assisted development** are documented in:
+
+```
+REFLECTION.md
+```
+
+---
+
+# Reference
+
+FuelEU Maritime Regulation:
+
+**EU Regulation 2023/1805**
+
+Relevant sections:
+
+* Article 20 — Banking
+* Article 21 — Pooling
+* Annex IV — GHG intensity calculations
